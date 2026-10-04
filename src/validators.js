@@ -3,7 +3,7 @@ const { z } = require('zod');
 const executeCommandSchema = z.object({
   command: z.string().min(1).max(1000),
   context: z.object({
-    discord_user_id: z.string().optional(),
+    discord_user_id: z.string().regex(/^\d{17,20}$/, 'Invalid Discord ID').optional(),
     authorized_users: z.array(z.string()).optional()
   }).optional()
 });

@@ -15,10 +15,14 @@ Você tem acesso a ferramentas via MCP (Model Context Protocol) que permitem:
 - Consultar histórico de stats
 - Atualizar um campo para todos os 25 personagens de uma vez (ex: marcar Berkas como "Feito")
 
-**Autorização Discord:**
-Cada conta (username) está vinculada a um Discord user ID. Somente o dono ou usuários autorizados (@mencionados) podem editar dados.
+**IMPORTANTE - Autorização Discord:**
+Cada conta (username) está vinculada a um Discord user ID. Somente o dono ou usuários autorizados podem editar dados.
 
-Quando o contexto incluir \`discord_user_id\`, use-o nas chamadas MCP para validação de permissão.
+O contexto SEMPRE incluirá \`discord_user_id\` (obrigatório). Você DEVE passar este valor como \`discord_id\` em TODAS as chamadas MCP de escrita:
+- register_stats: requer discord_id
+- update_stat_all_chars: requer discord_id
+
+Chamadas sem discord_id serão rejeitadas pela API com erro 403.
 
 **Instruções:**
 1. Interprete o comando do usuário
@@ -28,9 +32,9 @@ Quando o contexto incluir \`discord_user_id\`, use-o nas chamadas MCP para valid
 5. Retorne resultado formatado em português brasileiro
 
 **Exemplos de comandos:**
-- "Liste todos os personagens" → use list_characters
-- "Marque Berkas diário como Feito para o usuário oGus" → use update_stat_all_chars (com discord_user_id se no contexto)
-- "Registre 1000000 de ATK total para Elesis do jogador PlayerKR" → use register_stats (com discord_user_id se no contexto)
+- "Liste todos os personagens" → use list_characters (sem discord_id necessário)
+- "Marque Berkas diário como Feito para o usuário oGus" → use update_stat_all_chars com discord_id do contexto
+- "Registre 1000000 de ATK total para Elesis do jogador PlayerKR" → use register_stats com discord_id do contexto
 
 Sempre confirme ações destrutivas antes de executar.`;
   }
@@ -76,7 +80,14 @@ Sempre confirme ações destrutivas antes de executar.`;
         const results = [];
         for (const toolCall of message.tool_calls) {
           const toolName = toolCall.function.name;
-          const toolArgs = JSON.parse(toolCall.function.arguments);
+          let toolArgs = JSON.parse(toolCall.function.arguments);
+          
+          // Injetar discord_id do contexto em ferramentas de escrita
+          const writeTools = ['register_stats', 'update_stat_all_chars', 'create_user'];
+          if (writeTools.includes(toolName) && context.discord_user_id && !toolArgs.discord_id) {
+            toolArgs.discord_id = context.discord_user_id;
+            logger.info({ toolName, discord_id: context.discord_user_id }, 'Injected discord_id into tool args');
+          }
           
           logger.info({ toolName, toolArgs }, 'Calling MCP tool');
           const result = await this.mcpClient.callTool(toolName, toolArgs);

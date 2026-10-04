@@ -104,15 +104,24 @@ curl -X POST http://localhost:3001/api/execute \
 
 ## MCP Tools Disponíveis
 
-O agente tem acesso a 7 ferramentas via MCP:
+O agente tem acesso a 10 ferramentas via MCP:
 
-1. **create_user** - Criar usuário
-2. **list_users** - Listar usuários
-3. **list_characters** - Listar 25 personagens
-4. **register_stats** - Registrar stats individual
-5. **register_stats_batch** - Registrar stats em lote
-6. **query_stats** - Consultar histórico
-7. **update_stat_all_chars** - Atualizar 1 campo em todos os 25 personagens
+1. **create_discord_user** - Registrar usuário Discord
+2. **create_user** - Criar conta de jogo vinculada a Discord owner
+3. **list_users** - Listar usuários
+4. **list_characters** - Listar 25 personagens
+5. **register_stats** - Registrar stats individual (agora inclui acessórios: anel, tornozeleira, brinco, piercing + anotações)
+6. **register_stats_batch** - Registrar stats em lote
+7. **query_stats** - Consultar histórico
+8. **update_stat_all_chars** - Atualizar 1 campo em todos os 25 personagens (agora suporta acessórios)
+9. **grant_permission** - Conceder permissão de edição
+10. **revoke_permission** - Revogar permissão
+11. **list_permissions** - Listar permissões de uma conta
+
+**Novos campos disponíveis (v1.1.0):**
+- Acessórios: `status_anel`, `tipo_anel`, `status_tornozeleira`, `tipo_tornozeleira`
+- Notas: `anotacoes` (texto livre, max 5000 chars)
+- Calculado: `poder` (auto: (atk + atk_sp) / 10000)
 
 Ver documentação completa em [gc-management-api](https://github.com/g-soldera/gc-management-api).
 

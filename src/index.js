@@ -59,7 +59,7 @@ app.post('/api/execute', authMiddleware, validate(executeCommandSchema), async (
     const result = await agent.execute(command, context);
     res.json(result);
   } catch (error) {
-    logger.error({ error: error.message }, 'Execution failed');
+    logger.error({ error: error.message, stack: error.stack }, 'Execution failed');
     res.status(500).json({
       status: 'error',
       error: error.message
