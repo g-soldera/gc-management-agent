@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: gc-management-agent
+    runtime: node
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MCP_SERVER_PATH
+        value: /opt/render/project/src/mcp-server-local/index.js
+      - key: MCP_API_URL
+        sync: false
+      - key: MCP_API_KEY
+        sync: false
