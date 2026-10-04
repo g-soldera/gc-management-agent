@@ -100,11 +100,19 @@ curl -X POST http://localhost:3001/api/execute \
     "command": "Registre 1000000 de ATK total para Elesis do jogador PlayerKR",
     "context": {"date": "2026-10-04"}
   }'
+
+# Extrair stats de screenshot via OCR
+curl -X POST http://localhost:3001/api/execute \
+  -H "X-API-Key: your-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "Extraia os stats deste screenshot: https://i.imgur.com/example.png para o personagem Elesis"
+  }'
 ```
 
 ## MCP Tools Disponíveis
 
-O agente tem acesso a 10 ferramentas via MCP:
+O agente tem acesso a 12 ferramentas via MCP:
 
 1. **create_discord_user** - Registrar usuário Discord
 2. **create_user** - Criar conta de jogo vinculada a Discord owner
@@ -117,11 +125,16 @@ O agente tem acesso a 10 ferramentas via MCP:
 9. **grant_permission** - Conceder permissão de edição
 10. **revoke_permission** - Revogar permissão
 11. **list_permissions** - Listar permissões de uma conta
+12. **extract_stats_from_image** - Extrair atributos de screenshot via OCR (GPT-4o Vision)
 
-**Novos campos disponíveis (v1.1.0):**
+**Novos campos disponíveis (v1.2.0):**
 - Acessórios: `status_anel`, `tipo_anel`, `status_tornozeleira`, `tipo_tornozeleira`
 - Notas: `anotacoes` (texto livre, max 5000 chars)
 - Calculado: `poder` (auto: (atk + atk_sp) / 10000)
+
+**Novos recursos (v1.2.0):**
+- Reset automático semanal/diário (preserva histórico)
+- OCR de screenshots com GPT-4o Vision
 
 Ver documentação completa em [gc-management-api](https://github.com/g-soldera/gc-management-api).
 
