@@ -1,8 +1,11 @@
-# Architecture - GrandChase Management Agent
+# Architecture - GrandChase Management Agent v1.2.0
 
 ## Overview
 
 Agente intent-based que interpreta comandos em linguagem natural via OpenAI e executa ferramentas MCP (Model Context Protocol) para gerenciar personagens do GrandChase Classic.
+
+**Versão:** 1.2.0  
+**Novidades:** 12 tools MCP (inclui Discord auth + OCR), acesso a acessórios e anotações
 
 ## Stack Tecnológico
 
@@ -17,12 +20,17 @@ graph TB
     end
     
     subgraph MCP["MCP Server (subprocess)"]
-        MCPServer[gc-management-api<br/>mcp-server/index.js]
+        MCPServer[gc-management-api<br/>mcp-server/index.js<br/>12 tools]
     end
     
     subgraph Backend["gc-management-api"]
         REST[REST API<br/>Express.js]
         DB[(Supabase PostgreSQL<br/>Kimball Model)]
+        OCR[OpenAI GPT-4o Vision<br/>OCR Screenshots]
+    end
+    
+    subgraph Cron["GitHub Actions (cron)"]
+        Actions[Daily Reset 03:00 BRT<br/>Weekly Reset Wed 03:00 BRT]
     end
     
     Orchestrator -->|HTTP POST + X-API-Key| API
@@ -31,11 +39,13 @@ graph TB
     MCPClient -->|stdio| MCPServer
     MCPServer -->|HTTP + X-API-Key| REST
     REST -->|Supabase SDK| DB
+    REST -->|Vision API| OCR
+    Actions -->|POST reset endpoints| REST
 ```
 
 ## Fluxo de Dados A2A Protocol
 
-### Exemplo: "Marque Berkas diário como Feito para o usuário oGus"
+### Exemplo 1: "Marque Berkas diário como Feito para o usuário oGus"
 
 ```mermaid
 sequenceDiagram
@@ -61,6 +71,36 @@ sequenceDiagram
     MCP-->>Agent: tool result
     Agent->>OpenAI: Second turn with tool results
     OpenAI-->>Agent: "Marquei Berkas diário como Feito para todos os 25 personagens do usuário oGus"
+    Agent-->>API: {status: "success", result: "...", metadata: {...}}
+    API-->>Orch: JSON response
+```
+
+### Exemplo 2: "Extraia os stats deste screenshot para Elesis" (v1.2.0 - OCR)
+
+```mermaid
+sequenceDiagram
+    participant Orch as Orchestrator
+    participant API as Agent API
+    participant Agent as IntentAgent
+    participant OpenAI as OpenAI GPT-4o
+    participant MCP as MCP Client
+    participant Server as MCP Server
+    participant Backend as gc-management-api
+    participant Vision as GPT-4o Vision
+
+    Orch->>API: POST /api/execute<br/>{command: "Extraia stats de https://.../print.png para Elesis"}
+    API->>Agent: execute(command, context)
+    Agent->>OpenAI: chat.completions.create<br/>tools incluem extract_stats_from_image
+    OpenAI-->>Agent: tool_call: extract_stats_from_image<br/>{image_url: "https://...", char_name: "Elesis"}
+    Agent->>MCP: callTool("extract_stats_from_image", args)
+    Server->>Backend: POST /api/ocr/extract-stats
+    Backend->>Vision: Chat Completion com imagem
+    Vision-->>Backend: {atk: 45000, atk_sp: 15000, nivel: 90, confidence: 0.95}
+    Backend-->>Server: {success: true, extracted: {...}}
+    Server-->>MCP: MCP response
+    MCP-->>Agent: tool result
+    Agent->>OpenAI: Second turn with tool results
+    OpenAI-->>Agent: "Encontrei ATK 45000, ATK SP 15000, nível 90 para Elesis (confiança 95%). Use register_stats para salvar."
     Agent-->>API: {status: "success", result: "...", metadata: {...}}
     API-->>Orch: JSON response
 ```
@@ -95,12 +135,13 @@ sequenceDiagram
 ```
 Você é um agente especializado em gerenciar personagens do GrandChase Classic.
 
-Você tem acesso a ferramentas via MCP que permitem:
-- Criar usuários
+Você tem acesso a 12 ferramentas via MCP que permitem:
+- Gerenciar usuários e permissões Discord
 - Listar usuários e personagens
-- Registrar estatísticas (individual ou lote)
+- Registrar estatísticas (individual ou lote), incluindo acessórios e anotações
 - Consultar histórico
 - Atualizar campo em todos os 25 personagens
+- Extrair atributos de screenshots via OCR
 
 Instruções:
 1. Interprete o comando
@@ -203,11 +244,11 @@ Instruções:
 graph LR
     GitHub[GitHub Repo<br/>gc-management-agent]
     
-    Render[Render Web Service<br/>Free tier<br/>Build: npm install<br/>Start: npm start]
+    Render[Render Web Service<br/>Auto-deploy on push<br/>Free tier<br/>Build: npm install<br/>Start: npm start]
     
-    OpenAI[OpenAI API<br/>GPT-4o]
+    OpenAI[OpenAI API<br/>GPT-4o + Vision]
     
-    Backend[gc-management-api<br/>Render Web Service]
+    Backend[gc-management-api<br/>Render Web Service<br/>12 MCP tools]
     
     Env[Environment Variables<br/>OPENAI_API_KEY<br/>API_KEY<br/>MCP_API_URL<br/>MCP_API_KEY]
     
@@ -222,6 +263,7 @@ graph LR
 | Serviço | Tier | Custo/Mês |
 |---------|------|-----------|
 | OpenAI API | Pay-as-you-go | $1-5 (100 req/dia, GPT-4o) |
+| OpenAI OCR | Pay-as-you-go | ~$0.10-1 (10-100 screenshots/mês) |
 | Render (Agent) | Free | $0 (750h, sleep após inatividade) |
 | Render (Backend) | Free | $0 (já deployado) |
 | **Total** | | **$1-5/mês** |
@@ -230,48 +272,77 @@ graph LR
 
 1. **Modelo:** Migrar para `gpt-4o-mini` (5x mais barato, ~$0.20/mês)
 2. **Caching:** OpenAI prompt caching (50% desconto em system prompt)
-3. **Alternativa Render:** Ver `.planning-alternatives.md` para free tier maior
+3. **OCR seletivo:** Usar gpt-4o-mini vision para OCR simples (~$0.001/imagem)
+4. **Alternativa Render:** Ver `.planning-alternatives.md` para free tier maior
 
-## MCP Tools Schema
+## MCP Tools Schema (v1.2.0 - 12 Tools)
 
 ```javascript
-[
-  {
-    name: "create_user",
-    description: "Create new user (supports Korean chars)",
-    inputSchema: { username: string }
-  },
-  {
-    name: "list_users",
-    description: "List all users",
-    inputSchema: {}
-  },
-  {
-    name: "list_characters",
-    description: "List 25 GrandChase characters",
-    inputSchema: {}
-  },
-  {
-    name: "register_stats",
-    description: "Register character stats (single)",
-    inputSchema: { username, char_name, date?, nivel?, atk_total?, ... }
-  },
-  {
-    name: "register_stats_batch",
-    description: "Register stats in batch",
-    inputSchema: { records: [...] }
-  },
-  {
-    name: "query_stats",
-    description: "Query stats with filters",
-    inputSchema: { username?, char_name?, from_date?, to_date? }
-  },
-  {
-    name: "update_stat_all_chars",
-    description: "Update 1 field for ALL 25 characters",
-    inputSchema: { username, field_name, field_value, date? }
-  }
-]
+// Discord & Permissions (5 tools)
+{
+  name: "create_discord_user",
+  description: "Register a Discord user in the system",
+  inputSchema: { discord_id: string, discord_username: string }
+},
+{
+  name: "create_user",
+  description: "Create game account linked to Discord owner",
+  inputSchema: { username: string, discord_owner_id: string }
+},
+{
+  name: "grant_permission",
+  description: "Owner grants permission to edit account",
+  inputSchema: { owner_discord_id: string, username: string, grant_to_discord_id: string }
+},
+{
+  name: "revoke_permission",
+  description: "Owner revokes permission",
+  inputSchema: { owner_discord_id: string, username: string, revoke_from_discord_id: string }
+},
+{
+  name: "list_permissions",
+  description: "List permissions for a game account",
+  inputSchema: { username: string }
+},
+
+// Data Management (6 tools)
+{
+  name: "list_users",
+  description: "List all registered users",
+  inputSchema: {}
+},
+{
+  name: "list_characters",
+  description: "List 25 GrandChase characters",
+  inputSchema: {}
+},
+{
+  name: "register_stats",
+  description: "Register character stats (single). v1.2.0: inclui acessórios + anotacoes",
+  inputSchema: { username, char_name, discord_id, date?, nivel?, atk_total?, atk?, atk_sp?, status_anel?, tipo_anel?, status_tornozeleira?, tipo_tornozeleira?, anotacoes?, ... }
+},
+{
+  name: "register_stats_batch",
+  description: "Register stats in batch (max 100)",
+  inputSchema: { records: [...] }
+},
+{
+  name: "query_stats",
+  description: "Query stats with filters",
+  inputSchema: { username?, char_name?, from_date?, to_date?, limit?, offset? }
+},
+{
+  name: "update_stat_all_chars",
+  description: "Update 1 field for ALL 25 characters. v1.2.0: whitelist expandida (18 campos incl. acessórios)",
+  inputSchema: { username, discord_id, field_name, field_value, date? }
+},
+
+// OCR & Automation (1 tool)
+{
+  name: "extract_stats_from_image",
+  description: "Extract character stats from screenshot via GPT-4o Vision. v1.2.0",
+  inputSchema: { image_url?, image_base64?, char_name? }
+}
 ```
 
 ## Ponytail (Future Optimizations)
